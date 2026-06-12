@@ -1,0 +1,74 @@
+% !TeX program = xelatex
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+
+\usepackage{USTCReport}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{ragged2e}
+
+\graphicspath{{overleaf_assets/}{pic/}{outputs/ethanol/figures/}{outputs/ethanol/eval/}}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+\titleformat{\section}{\heiti\large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\heiti\normalsize\bfseries}{\thesubsection}{0.6em}{}
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\DeclareUrlCommand\codepath{\urlstyle{tt}}
+\makeatletter
+\g@addto@macro\UrlBreaks{\do\/\do\_\do\-\do\.}
+\makeatother
+\Urlmuskip=0mu plus 2mu
+\emergencystretch=8em
+\setcounter{tocdepth}{2}
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    breakatwhitespace=false,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    backgroundcolor=\color{gray!6}
+}
+
+\begin{document}
+\sloppy
+
+\cover
+\newpage
+\tableofcontents
+\newpage
+
+\section{实验题目}
+
+
+
+\section{实验目的}
+
+
+
+
+\section{安装 OpenClaw}
+
+
+
+
+\section{编写 Agent Skills}
+
+\section{运行 Agent 进行化学任务}
+
+
+
+
+
+
+\section{遇到的问题及解决方法}
+
+
+\section{总结}
+
+
+\end{document}
