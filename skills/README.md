@@ -3,15 +3,6 @@
 本目录是 EXP3 作业中**自行编写**的 Agent Skill，用于在 OpenClaw / 飞书中完成
 一个与课堂示例不同的化学任务集：**方程式配平 + 化学计量 + 实验式反推 + 热化学**。
 
-## 与课堂示例的区别
-
-| 课堂示例 | 任务 |
-|---|---|
-| chemical-safety-report | 化学品安全报告（联网检索 SDS/GHS） |
-| compound-3d-profile | 分子身份查询 + RDKit 性质 + 3D 构象 |
-| xtb-demo-workflow | 半经验量子化学几何优化 |
-| **reaction-stoichiometry（本 Skill）** | **配平 / 化学计量 / 绿色指标 / 实验式 / 反应焓（本地精确计算 + 出图）** |
-
 ## 为什么不是"普通 LLM 也能做"
 
 裸 LLM 在这些任务上**不可靠甚至做不到**，而本 Skill 解决了：

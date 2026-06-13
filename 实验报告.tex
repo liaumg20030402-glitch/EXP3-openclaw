@@ -8,7 +8,7 @@
 \usepackage{array}
 \usepackage{ragged2e}
 
-\graphicspath{{overleaf_assets/}{pic/}{outputs/ethanol/figures/}{outputs/ethanol/eval/}}
+\graphicspath{{overleaf_assets/}{pic/}{output/}{outputs/ethanol/figures/}{outputs/ethanol/eval/}}
 \hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
 \renewcommand{\thesection}{\arabic{section}}
 \renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
@@ -102,8 +102,6 @@ Agent Skill（\codepath{reaction-stoichiometry}），并在 OpenClaw + 飞书环
 
 \subsection{设计目标与选题}
 
-课程示例仓库提供了三个实验级 Skill：化学品安全报告（联网检索 SDS/GHS）、分子 3D Profile
-（PubChem + RDKit + 3D 构象）、xTB 半经验量子化学优化工作流。为体现``与示例不同''的要求，
 本实验设计了一个全新主题的 Skill —— \textbf{反应配平与化学计量分析}
 （\codepath{reaction-stoichiometry}）。
 
@@ -120,9 +118,7 @@ Agent Skill（\codepath{reaction-stoichiometry}），并在 OpenClaw + 飞书环
           回退为 SVG）—— 纯文本模型无法产出文件。
 \end{enumerate}
 
-该 Skill 的核心功能\textbf{仅依赖 Python 标准库}（\codepath{fractions}），不联网、不依赖
-RDKit，因此演示时不会因网络或第三方依赖缺失而失败，可用 \codepath{python}、
-\codepath{python3} 或 \codepath{uv run} 任一方式运行。
+
 
 \subsection{Skill 目录结构}
 
@@ -182,11 +178,40 @@ skills/
     \end{tabularx}
 \end{table}
 
-\subsection{核心脚本：精确配平算法}
+\subsection{核心脚本：算法实现}
 
-配平的本质是求解元素守恒方程组的零空间。脚本把每个物种解析为``元素 $\to$ 原子数''的向量，
-构造``元素 $\times$ 物种''系数矩阵（反应物为正、产物为负），再用\textbf{分数精确运算}做行最简化
-（RREF）求零空间基向量，最后清分母、取最大公约数化为最小正整数系数。核心片段如下：
+核心脚本 \codepath{stoichiometry_helper.py} 仅依赖 Python 标准库，由\textbf{四个子命令}组成，
+它们共享底层的化学式解析、摩尔质量计算与配平模块。脚本通过 \codepath{argparse} 组织子命令：
+
+\begin{lstlisting}
+sub = p.add_subparsers(dest="cmd", required=True)
+sub.add_parser("balance",   ...)   # --equation [--output]
+sub.add_parser("stoich",    ...)   # --equation --given [--actual --target --plot --output]
+sub.add_parser("empirical", ...)   # --combustion --sample | --percent  [--molar-mass --output]
+sub.add_parser("thermo",    ...)   # --equation [--dhf --output]
+\end{lstlisting}
+
+每个子命令成功时都打印若干 \codepath{[RESULT] key=value} 行和一行以 \codepath{[JSON]} 开头的
+完整结果，便于 Agent 解析；出错时打印 \codepath{[ERROR] ...} 并返回非零退出码。下面依次说明
+公共模块与四个子功能的算法。
+
+\subsubsection{公共模块：化学式解析与摩尔质量}
+
+\codepath{parse_formula} 用一个支持栈的递归下降解析器，把化学式解析为``元素 $\to$ 原子数''
+字典，支持\textbf{嵌套括号/方括号、下标、前置系数、水合物点号}（如 \codepath{CuSO4·5H2O}，
+分隔符 \codepath{·•*.} 均可），并忽略状态符 \codepath{(s)/(l)/(g)/(aq)} 与离子电荷。摩尔质量由
+内置 IUPAC 标准原子量表 $A_{el}$ 求和得到：
+\[
+    M = \sum_{el} n_{el}\, A_{el}.
+\]
+
+\subsubsection{子功能一：方程式配平（balance）}
+
+配平的本质是求解元素守恒方程组的零空间。把每个物种解析为元素向量后，构造
+``元素 $\times$ 物种''系数矩阵 $\mathbf{A}$（反应物为正、产物为负），配平即求满足
+$\mathbf{A}\mathbf{x}=\mathbf{0}$ 的最小正整数解 $\mathbf{x}$。脚本用\textbf{分数精确运算}
+（\codepath{fractions.Fraction}）做行最简化（RREF）求零空间基向量，再清分母、约去最大公约数
+化为最小正整数系数，从根本上避免浮点误差与``幻觉''系数：
 
 \begin{lstlisting}
 def balance_equation(reactants, products):
@@ -195,10 +220,10 @@ def balance_equation(reactants, products):
     parsed = [parse_formula(s) for s in species]
     elements = sorted({el for p in parsed for el in p})
     matrix = []
-    for el in elements:
+    for el in elements:                               # element x species matrix
         matrix.append([Fraction(p.get(el, 0) if i < nr else -p.get(el, 0))
                        for i, p in enumerate(parsed)])
-    basis = _nullspace_basis(matrix, len(species))   # rational null space
+    basis = _nullspace_basis(matrix, len(species))    # rational null space
     if len(basis) == 0:
         raise ValueError("Equation cannot be balanced ...")
     if len(basis) > 1:
@@ -212,19 +237,84 @@ def balance_equation(reactants, products):
     return ints[:nr], ints[nr:]
 \end{lstlisting}
 
-\codepath{parse_formula} 支持嵌套括号、下标、水合物点号（如 \codepath{CuSO4·5H2O}）与状态符
-\codepath{(s)/(l)/(g)/(aq)}；摩尔质量与生成焓使用内置标准数据表。脚本通过子命令组织（节选）：
+当零空间维数为 0（无法配平）或大于 1（含多个独立反应）时，脚本报错并提示用户，而不是
+强行给出可疑结果。
+
+\subsubsection{子功能二：化学计量与绿色化学指标（stoich）}
+
+在配平得到系数 $\nu_i$ 后，把每个给定反应物用量换算为物质的量 $n_i$，以\textbf{反应进度}
+$\xi$ 衡量反应推进程度，并由此确定限制试剂：
+\[
+    \xi = \min_{i\,\in\,\text{已给反应物}} \frac{n_i}{\nu_i},
+    \qquad \text{限制试剂} = \arg\min_i \frac{n_i}{\nu_i}.
+\]
+各产物 $j$ 的理论产量与各反应物的剩余量为
+\[
+    n_{\text{prod},j} = \nu_j\,\xi,\qquad
+    \text{剩余}_i = n_i - \nu_i\,\xi .
+\]
+脚本还计算两个绿色化学指标——\textbf{原子经济性}（目标产物 $t$ 占全部反应物质量的比例）与
+理论 \textbf{E-factor}（废物质量 / 目标产物质量）：
+\[
+    \mathrm{AE} = \frac{\nu_t M_t}{\sum_i \nu_i M_i}\times100\%,
+    \qquad
+    E = \frac{\sum_i \nu_i\xi M_i - \nu_t\xi M_t}{\nu_t\xi M_t}.
+\]
+若用户额外给出某产物的\textbf{实际产量} $m_\text{actual}$，则计算百分产率
+$m_\text{actual}/(\nu\xi M)\times100\%$。核心逻辑如下：
 
 \begin{lstlisting}
-sub = p.add_subparsers(dest="cmd", required=True)
-sub.add_parser("balance",   ...)   # --equation [--output]
-sub.add_parser("stoich",    ...)   # --equation --given [--actual --target --plot --output]
-sub.add_parser("empirical", ...)   # --combustion --sample | --percent  [--molar-mass --output]
-sub.add_parser("thermo",    ...)   # --equation [--dhf --output]
+# extent of reaction = min over given reactants of (moles / coefficient)
+xi = min(given_moles[n] / coeff[n] for n in reactants if n in given_moles)
+limiting = [n for n in given_moles if n in reactants
+            and abs(given_moles[n]/coeff[n] - xi) < 1e-12]
+atom_economy = 100 * coeff[target]*mw[target] / sum(coeff[n]*mw[n] for n in reactants)
+for n in products:                       # theoretical yield of each product
+    theoretical_g[n] = coeff[n] * xi * mw[n]
 \end{lstlisting}
 
-脚本成功时打印若干 \codepath{[RESULT] key=value} 行和一行以 \codepath{[JSON]} 开头的完整结果，
-便于 Agent 解析；\codepath{stoich} 还总是打印 \codepath{[CHART]} 文本柱状图。
+该子命令总是额外打印一个 \codepath{[CHART]} \textbf{文本柱状图}（见第~\ref{sec:problems}~节问题二），
+并可用 \codepath{--plot} 把图额外存为 PNG/SVG 文件。
+
+\subsubsection{子功能三：实验式 / 分子式反推（empirical）}
+
+支持两种输入。\textbf{燃烧分析}：含 C、H（可能含 O）的有机物完全燃烧，由 $\mathrm{CO_2}$、
+$\mathrm{H_2O}$ 质量得到 C、H 物质的量，O 由样品质量差减求得：
+\[
+    n_C = \frac{m_{\mathrm{CO_2}}}{M_{\mathrm{CO_2}}},\quad
+    n_H = \frac{2\,m_{\mathrm{H_2O}}}{M_{\mathrm{H_2O}}},\quad
+    n_O = \frac{m_\text{sample} - n_C A_C - n_H A_H}{A_O}.
+\]
+\textbf{元素质量百分比}：以 100\,g 为基准，$n_{el} = w_{el}/A_{el}$。随后把各物质的量除以最小值，
+并乘以 $1\!\sim\!8$ 的整数倍直到全部接近整数，得到\textbf{实验式}下标。若给定摩尔质量 $M$，
+则按倍数 $k=\mathrm{round}(M/M_\text{emp})$ 放大为\textbf{分子式}：
+
+\begin{lstlisting}
+molC = m_CO2 / M("CO2")                 # 1 C per CO2
+molH = 2 * m_H2O / M("H2O")             # 2 H per H2O
+mO   = sample_g - molC*A("C") - molH*A("H")        # O by difference
+subs = integer_ratios({"C": molC, "H": molH, "O": mO/A("O")})   # -> CH2O
+mult = round(molar_mass_given / formula_mass(subs))             # x6 -> C6H12O6
+\end{lstlisting}
+
+\subsubsection{子功能四：反应焓计算（thermo）}
+
+先配平方程式，再用内置\textbf{标准生成焓}表 $\Delta H_f^\circ$（kJ/mol，元素单质为 0）按
+\textbf{盖斯定律}计算反应焓：
+\[
+    \Delta H_\text{rxn} = \sum_{\text{产物}} \nu\,\Delta H_f^\circ
+                        - \sum_{\text{反应物}} \nu\,\Delta H_f^\circ ,
+\]
+并据 $\Delta H<0$ / $>0$ 判定放热 / 吸热。若某物种不在内置表中，脚本报错并提示用
+\codepath{--dhf} 参数补充其生成焓，避免编造数据。
+
+\begin{lstlisting}
+dH = (sum(nu * dHf[p] for p, nu in products)      # Hess's law
+      - sum(nu * dHf[r] for r, nu in reactants))
+\end{lstlisting}
+
+内置 $\Delta H_f^\circ$ 默认采用常规标准态（$\mathrm{H_2O}$ 取液态；金属、氧化物、盐取固态；
+气体按写法），报告中会注明该假设。
 
 \subsection{本地自测}
 
@@ -301,14 +391,46 @@ Agent 自动推断应使用 \codepath{reaction-stoichiometry} 的 \codepath{stoi
     \item $\mathrm{CO_2}$、$\mathrm{H_2O}$ 理论产量分别为 29.27\,g、17.97\,g，氧气剩余 2.76\,g。
 \end{itemize}
 
-回复中以\textbf{文本柱状图}展示理论与实际产量对比，并列出\textbf{生成文件}的绝对路径：
-\codepath{/home/ubuntu/.openclaw/workspace/reaction_outputs/ethane_combustion/result.json}
-与同目录下的 \codepath{yield.svg}。脚本生成的产量对比图见图~\ref{fig:yield}。
+回复中以\textbf{文本柱状图}展示理论与实际产量对比，并\textbf{列出生成文件的绝对路径}。
+在虚拟机工作目录 \codepath{~/.openclaw/workspace/reaction_outputs/ethane_combustion/} 下，
+可以看到 Skill 实际生成的两个文件 \codepath{result.json} 与 \codepath{yield.svg}
+（图~\ref{fig:files}）。
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.6\textwidth]{ethane_yield.png}
-    \caption{Skill 生成的产量对比图（理论 vs 实际）}
+    \includegraphics[width=0.95\textwidth]{生成文件.png}
+    \caption{虚拟机工作目录中 Skill 实际生成的文件（{result.json} 与 {yield.svg}）}
+    \label{fig:files}
+\end{figure}
+
+其中 \codepath{result.json} 是脚本输出的结构化结果文件（内容节选，已从虚拟机取回，存于
+本项目 \codepath{output/} 目录）：
+
+\begin{lstlisting}
+{
+  "balanced": "2 C2H6 + 7 O2 -> 4 CO2 + 6 H2O",
+  "limiting_reagent": ["C2H6"],
+  "atom_economy_percent": 61.96,
+  "e_factor": 0.614,
+  "percent_yield": {"CO2": {"actual_g": 25.0,
+                            "theoretical_g": 29.271,
+                            "percent_yield": 85.41}},
+  "reactants": [ {"formula": "C2H6", "is_limiting": true,  "leftover_g": 0.0},
+                 {"formula": "O2",   "is_limiting": false, "leftover_g": 2.7559} ],
+  "products":  [ {"formula": "CO2", "theoretical_g": 29.271},
+                 {"formula": "H2O", "theoretical_g": 17.9731} ],
+  "chart_file": ".../reaction_outputs/ethane_combustion/yield.svg"
+}
+\end{lstlisting}
+
+\codepath{yield.svg} 是脚本绘制的产量对比图。由于虚拟机中未安装 matplotlib，脚本按设计
+\textbf{自动回退生成 SVG}；为便于排版，图~\ref{fig:yield} 由取回的 \codepath{output/yield.svg}
+文件转换而来。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.72\textwidth]{yield.pdf}
+    \caption{Skill 实际生成的产量对比图（理论 vs 实际产量）}
     \label{fig:yield}
 \end{figure}
 
@@ -347,6 +469,8 @@ PNG 在飞书中无法作为图片消息正常显示。\textit{解决}：让 \co
           决定了 Skill 能否在真实环境中稳定演示与复用。
 \end{enumerate}
 
-附：OpenClaw 运行日志文件随压缩包一并提交。
+附：OpenClaw 运行日志文件（\codepath{logs/openclaw/} 下的 \codepath{openclaw-2026-06-12.log}
+与 \codepath{openclaw-2026-06-13.log}）及 Skill 实际生成的结果文件（\codepath{output/} 下的
+\codepath{result.json} 与 \codepath{yield.svg}）随压缩包一并提交。
 
 \end{document}
