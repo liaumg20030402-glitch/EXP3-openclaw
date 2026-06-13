@@ -1,0 +1,63 @@
+{
+  "mode": "stoich",
+  "input": "C2H6 + O2 -> CO2 + H2O",
+  "balanced": "2 C2H6 + 7 O2 -> 4 CO2 + 6 H2O",
+  "extent_of_reaction_mol": 0.166279,
+  "limiting_reagent": [
+    "C2H6"
+  ],
+  "target_product": "CO2",
+  "atom_economy_percent": 61.96,
+  "e_factor": 0.614,
+  "percent_yield": {
+    "CO2": {
+      "actual_g": 25.0,
+      "theoretical_g": 29.271,
+      "percent_yield": 85.41
+    }
+  },
+  "reactants": [
+    {
+      "formula": "C2H6",
+      "coefficient": 2,
+      "molar_mass": 30.07,
+      "is_limiting": true,
+      "supplied_mol": 0.332557,
+      "supplied_g": 10.0,
+      "consumed_mol": 0.332557,
+      "consumed_g": 10.0,
+      "leftover_mol": 0.0,
+      "leftover_g": 0.0
+    },
+    {
+      "formula": "O2",
+      "coefficient": 7,
+      "molar_mass": 31.998,
+      "is_limiting": false,
+      "supplied_mol": 1.250078,
+      "supplied_g": 40.0,
+      "consumed_mol": 1.163951,
+      "consumed_g": 37.2441,
+      "leftover_mol": 0.086127,
+      "leftover_g": 2.7559
+    }
+  ],
+  "products": [
+    {
+      "formula": "CO2",
+      "coefficient": 4,
+      "molar_mass": 44.009,
+      "theoretical_mol": 0.665115,
+      "theoretical_g": 29.271
+    },
+    {
+      "formula": "H2O",
+      "coefficient": 6,
+      "molar_mass": 18.015,
+      "theoretical_mol": 0.997672,
+      "theoretical_g": 17.9731
+    }
+  ],
+  "ascii_chart": "CO2  theoretical (g) |############################ 29.27\n     actual (g)      |######################## 25.00\nH2O  theoretical (g) |################# 17.97\n     actual (g)      | 0.00",
+  "chart_file": "/home/ubuntu/.openclaw/workspace/reaction_outputs/ethane_combustion/yield.svg"
+}
