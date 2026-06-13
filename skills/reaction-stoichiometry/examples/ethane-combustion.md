@@ -20,7 +20,8 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" stoich \
   --given "C2H6=10g, O2=40g" \
   --actual "CO2=25g" \
   --target CO2 \
-  --plot "compound_outputs/ethane/yield.png"
+  --plot "reaction_outputs/ethane_combustion/yield.png" \
+  --output "reaction_outputs/ethane_combustion/result.json"
 ```
 
 ## 脚本输出（节选）
@@ -60,12 +61,22 @@ CO2 百分产率：85.41%（实际 25.00 g / 理论 29.27 g）
 | CO2 | 4 | 0.6651 | 29.27 |
 | H2O | 6 | 0.9977 | 17.97 |
 
-产量对比图：compound_outputs/ethane/yield.png（理论 vs 实际）
+产量柱状图（理论 vs 实际，单位 g）
+​```
+CO2  theoretical (g) |############################ 29.27
+     actual (g)      |######################## 25.00
+H2O  theoretical (g) |################# 17.97
+     actual (g)      | 0.00
+​```
+生成文件
+- JSON 结果: .../reaction_outputs/ethane_combustion/result.json
+- 产量图: .../reaction_outputs/ethane_combustion/yield.png
 
 说明：乙烷为限制试剂，氧气过量 2.76 g。理论产量为上限值，实际产率 85.41%。
 ```
 
-（回复时把 `yield.png` 作为图片附件发回飞书。）
+> 注：用脚本输出的 `ascii_chart` 文本柱状图在飞书展示"图"，**不要**把 PNG 当聊天图片发送
+> ——GLM 等模型回传图片会出现 "media failed"。PNG 文件保存在磁盘上，留作实验报告附件。
 
 ## 其他子命令快速示例
 

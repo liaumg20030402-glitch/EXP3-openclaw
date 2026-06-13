@@ -428,6 +428,27 @@ def _esc(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
+def ascii_bar_chart(labels: List[str], series: Dict[str, List[float]],
+                    width: int = 28) -> str:
+    """A text bar chart that renders anywhere (no image media needed).
+
+    Robust to chat platforms / models that cannot deliver image attachments.
+    """
+    allv = [v for vals in series.values() for v in vals] or [1.0]
+    vmax = max(allv) or 1.0
+    names = list(series.keys())
+    lw = max((len(l) for l in labels), default=1)
+    nw = max((len(n) for n in names), default=1)
+    lines = []
+    for gi, lab in enumerate(labels):
+        for si, name in enumerate(names):
+            v = series[name][gi]
+            bars = int(round((v / vmax) * width)) if vmax else 0
+            head = lab if si == 0 else ""
+            lines.append(f"{head:<{lw}}  {name:<{nw}} |{'#' * bars} {v:.2f}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Empirical / molecular formula helpers
 # ---------------------------------------------------------------------------
@@ -565,15 +586,24 @@ def cmd_stoich(args) -> int:
     print(f"[RESULT] extent_mol={round(xi,6)}")
     print(f"[RESULT] atom_economy={round(atom_economy,2)}%")
 
-    # Optional chart artifact.
+    # Build the yield series once; used by both the text and image charts.
+    labels = products
+    theo = [coeff[n] * xi * mw[n] for n in products]
+    series = {"theoretical (g)": [round(t, 4) for t in theo]}
+    if yield_info:
+        series["actual (g)"] = [round(yield_info.get(n, {}).get("actual_g", 0.0), 4)
+                                for n in products]
+
+    # Always emit a text bar chart: renders in any chat / model, no media needed.
+    ascii_chart = ascii_bar_chart(labels, series)
+    print("[CHART]")
+    for line in ascii_chart.splitlines():
+        print(line)
+
+    # Optional PNG/SVG artifact (saved to disk; useful for reports). Sending it
+    # as a chat image is best-effort and not required -- the text chart suffices.
     chart_path = None
     if args.plot:
-        labels = products
-        theo = [coeff[n]*xi*mw[n] for n in products]
-        series = {"theoretical (g)": [round(t, 4) for t in theo]}
-        if yield_info:
-            series["actual (g)"] = [round(yield_info.get(n, {}).get("actual_g", 0.0), 4)
-                                    for n in products]
         chart_path = render_bar_chart(
             f"Theoretical yield: {balanced}", labels, series, Path(args.plot),
             ylabel="mass (g)")
@@ -584,7 +614,7 @@ def cmd_stoich(args) -> int:
            "target_product": target, "atom_economy_percent": round(atom_economy, 2),
            "e_factor": round(e_factor, 4), "percent_yield": yield_info,
            "reactants": reactant_rows, "products": product_rows,
-           "chart_file": chart_path}, args.output)
+           "ascii_chart": ascii_chart, "chart_file": chart_path}, args.output)
     return 0
 
 

@@ -53,6 +53,27 @@ python "E:/硕士课程/EXP3-openclaw/EXP3-openclaw/skills/reaction-stoichiometr
 脚本成功时打印若干 `[RESULT] key=value` 行和**一行以 `[JSON]` 开头的完整结果**；
 解析 `[JSON]` 即可拿到全部数据。出错时打印 `[ERROR] ...` 并返回非零退出码。
 
+## 默认输出目录与"生成文件"证据
+
+**每次调用都要落盘生成文件，并在回复中列出文件的绝对路径**——这是 Skill 真正产出了
+工件（而非仅靠文本推理）的证据。
+
+如果用户未指定输出目录，使用：
+
+```text
+./reaction_outputs/<safe_tag>/
+```
+
+`<safe_tag>` 由任务推断（如反应物/产物名或化合物名），转小写、空格与特殊字符换成下划线。
+例如乙烷燃烧用 `./reaction_outputs/ethane_combustion/`。
+
+调用约定：
+
+- **所有子命令都加 `--output "<output_dir>/result.json"`** → 脚本打印 `[RESULT] json_file=<绝对路径>`。
+- **`stoich` 额外加 `--plot "<output_dir>/yield.png"`** → 脚本打印 `[RESULT] chart_file=<绝对路径>`。
+- 读取这些 `[RESULT]` 行里的绝对路径，在最终回复的「生成文件」一节中逐条列出。
+- 若 `--plot` 因无 matplotlib 退回 SVG，`chart_file` 会是 `.svg`，照常列出即可。
+
 ## 四个子命令与触发判断
 
 | 用户意图 | 子命令 |
@@ -66,10 +87,12 @@ python "E:/硕士课程/EXP3-openclaw/EXP3-openclaw/skills/reaction-stoichiometr
 
 ```bash
 python "<SKILL_DIR>/scripts/stoichiometry_helper.py" balance \
-  --equation "KMnO4 + HCl -> KCl + MnCl2 + H2O + Cl2"
+  --equation "KMnO4 + HCl -> KCl + MnCl2 + H2O + Cl2" \
+  --output "<output_dir>/result.json"
 ```
 
-读取 `balanced`、`reactant_coefficients`、`product_coefficients`、`species[*].molar_mass`。
+读取 `balanced`、`reactant_coefficients`、`product_coefficients`、`species[*].molar_mass`，
+以及 `[RESULT] json_file=` 给出的结果文件路径。
 
 ### 2. stoich —— 化学计量 + 绿色化学指标 + 可选图表
 
@@ -79,17 +102,25 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" stoich \
   --given "C2H6=10g, O2=40g" \
   --actual "CO2=25g" \
   --target CO2 \
-  --plot "<output_dir>/yield.png"
+  --plot "<output_dir>/yield.png" \
+  --output "<output_dir>/result.json"
 ```
 
 - `--given`（必需）：反应物用量，单位 `g/mg/kg/mol/mmol`。
 - `--actual`（可选）：某产物实际获得量 → 计算**百分产率** `percent_yield`。
 - `--target`（可选）：目标产物，用于**原子经济性** `atom_economy_percent`（默认取第一个产物）。
-- `--plot`（可选）：生成产量柱状图，返回 `chart_file` 绝对路径；有 matplotlib 出 PNG，否则 SVG。
+- `--plot`（可选）：把柱状图额外存成 PNG/SVG **文件**，返回 `chart_file` 绝对路径。
 
 脚本以「反应进度 ξ = min(给定反应物 mol / 系数)」确定限制试剂，并算出理论产量、剩余量、
 原子经济性与理论 E-factor。读取 `limiting_reagent`、`products[*].theoretical_g`、
-`reactants[*].leftover_g`、`atom_economy_percent`、`e_factor`、`percent_yield`、`chart_file`。
+`reactants[*].leftover_g`、`atom_economy_percent`、`e_factor`、`percent_yield`。
+
+**图表（重要）**：脚本**总是**在 stdout 打印一个 `[CHART]` 文本柱状图，并把它放进
+JSON 的 `ascii_chart` 字段。**在飞书回复里直接用代码块展示这个文本柱状图即可**——
+它在任何模型/平台都能正常显示，不依赖图片传输。
+不要强行把 PNG 作为图片消息发送：部分模型/网关（如 GLM 系列）回传图片会失败显示
+"media failed"。`--plot` 生成的 PNG/SVG 仅作为**保存到磁盘的文件**（写实验报告时当附件用），
+在回复里说明文件路径即可，不要当作聊天内嵌图片发送。
 
 ### 3. empirical —— 实验式 / 分子式反推
 
@@ -97,14 +128,16 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" stoich \
 
 ```bash
 python "<SKILL_DIR>/scripts/stoichiometry_helper.py" empirical \
-  --combustion "CO2=0.352g, H2O=0.144g" --sample 0.240g --molar-mass 180.16
+  --combustion "CO2=0.352g, H2O=0.144g" --sample 0.240g --molar-mass 180.16 \
+  --output "<output_dir>/result.json"
 ```
 
 或由元素质量百分比：
 
 ```bash
 python "<SKILL_DIR>/scripts/stoichiometry_helper.py" empirical \
-  --percent "C=40.0, H=6.7, O=53.3" --molar-mass 180.16
+  --percent "C=40.0, H=6.7, O=53.3" --molar-mass 180.16 \
+  --output "<output_dir>/result.json"
 ```
 
 `--molar-mass`（可选）：给定摩尔质量则进一步给出**分子式** `molecular_formula`。
@@ -115,7 +148,8 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" empirical \
 
 ```bash
 python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
-  --equation "CH4 + O2 -> CO2 + H2O"
+  --equation "CH4 + O2 -> CO2 + H2O" \
+  --output "<output_dir>/result.json"
 ```
 
 脚本先配平，再用内置标准生成焓表算 ΔH_rxn = Σν·ΔHf(产物) − Σν·ΔHf(反应物)（kJ）。
@@ -142,6 +176,8 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 
 根据子命令选用对应模板，**数值全部取自脚本输出，不要手算改动**。
 
+所有任务的回复结尾都要有一个「生成文件」一节，逐条列出脚本返回的绝对路径，作为产出工件的证据。
+
 ### balance
 
 ```text
@@ -150,6 +186,9 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 
 | 物质 | 系数 | 摩尔质量 (g/mol) |
 |---|---:|---:|
+
+生成文件
+- JSON 结果: <json_file>
 ```
 
 ### stoich
@@ -170,11 +209,20 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 | 物质 | 系数 | 理论产量 (mol) | 理论产量 (g) |
 |---|---:|---:|---:|
 
-（如生成图表）产量柱状图：<chart_file>
+产量柱状图（文本）
+​```
+<把 JSON 的 ascii_chart 原样放进代码块>
+​```
+
+生成文件
+- JSON 结果: <json_file>
+- 产量图: <chart_file>（PNG/SVG，写报告时可作附件）
+
 说明：理论产量为完全反应、无损失的上限值。
 ```
 
-若生成了 `chart_file`，应把该图片文件作为附件/图片发回飞书。
+用文本柱状图（`ascii_chart`）在飞书展示"图"；不要把 PNG 当聊天图片发送，
+但**要把 `chart_file` 和 `json_file` 的绝对路径列在「生成文件」里**作为产出证据。
 
 ### empirical
 
@@ -182,6 +230,9 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 实验式：<empirical_formula>（式量 <empirical_formula_mass> g/mol）
 （如给摩尔质量）分子式：<molecular_formula>（倍数 ×<multiplier>）
 各元素物质的量：...
+
+生成文件
+- JSON 结果: <json_file>
 ```
 
 ### thermo
@@ -191,6 +242,9 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 反应焓 ΔH = <dH_rxn_kJ_per_mol_rxn> kJ（每摩尔反应），<nature>
 各物种 ΔHf° 贡献：...
 假设：<assumptions>
+
+生成文件
+- JSON 结果: <json_file>
 ```
 
 ## 错误处理与恢复
@@ -213,7 +267,9 @@ python "<SKILL_DIR>/scripts/stoichiometry_helper.py" thermo \
 - [ ] 中文物质名先转化学式并在回复中确认。
 - [ ] 配平、产量、产率、ΔH 等数值全部取自脚本 `[JSON]`，不手算。
 - [ ] stoich 任务至少给一个反应物用量；给了实际产量才报产率。
-- [ ] 生成了 `chart_file` 时把图片发回飞书。
+- [ ] 每个任务都加 `--output` 写 JSON 文件；stoich 还加 `--plot`。
+- [ ] 在回复「生成文件」一节列出 `json_file`（及 `chart_file`）的绝对路径作为产出证据。
+- [ ] 用文本柱状图 `ascii_chart` 展示图，不把 PNG 当聊天图片发送。
 - [ ] thermo 报告注明 ΔHf° 标准态假设。
 - [ ] 报告中标注理论产量是上限值。
 - [ ] 脚本报错先修正输入再重试。
